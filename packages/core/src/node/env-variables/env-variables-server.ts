@@ -25,6 +25,7 @@ import { FileUri } from '../file-uri';
 export class EnvVariablesServerImpl implements EnvVariablesServer {
 
     protected readonly envs: { [key: string]: EnvVariable } = {};
+    protected readonly homeDirUri = FileUri.create(homedir()).toString();
     protected readonly configDirUri = FileUri.create(join(homedir(), '.theia')).toString();
 
     constructor() {
@@ -51,6 +52,10 @@ export class EnvVariablesServerImpl implements EnvVariablesServer {
 
     async getConfigDirUri(): Promise<string> {
         return this.configDirUri;
+    }
+
+    async getHomeDirUri(): Promise<string> {
+        return this.homeDirUri;
     }
 
 }

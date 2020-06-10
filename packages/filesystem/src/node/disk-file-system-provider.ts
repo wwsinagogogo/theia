@@ -140,6 +140,14 @@ export class DiskFileSystemProvider implements Disposable,
         }
     }
 
+    async access(resource: URI, mode?: number): Promise<void> {
+        try {
+            await promisify(fs.access)(this.toFilePath(resource), mode);
+        } catch (error) {
+            throw this.toFileSystemProviderError(error);
+        }
+    }
+
     protected async statLink(path: string): Promise<DiskFileSystemProvider.StatAndLink> {
 
         // First stat the link

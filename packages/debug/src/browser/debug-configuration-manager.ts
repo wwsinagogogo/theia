@@ -36,8 +36,7 @@ import { ContextKey, ContextKeyService } from '@theia/core/lib/browser/context-k
 import { DebugConfiguration } from '../common/debug-common';
 import { WorkspaceVariableContribution } from '@theia/workspace/lib/browser/workspace-variable-contribution';
 import { PreferenceConfigurations } from '@theia/core/lib/browser/preferences/preference-configurations';
-import { TextBuffer } from '@theia/filesystem/lib/common/buffer';
-import { TextFileService } from '@theia/filesystem/lib/browser/text-file-service';
+import { WorkingCopyFileService } from '@theia/filesystem/lib/browser/working-copy-file-service';
 
 export interface WillProvideDebugConfiguration extends WaitUntilEvent {
 }
@@ -57,8 +56,8 @@ export class DebugConfigurationManager {
     @inject(ContextKeyService)
     protected readonly contextKeyService: ContextKeyService;
 
-    @inject(TextFileService)
-    protected readonly fileService: TextFileService;
+    @inject(WorkingCopyFileService)
+    protected readonly fileService: WorkingCopyFileService;
 
     @inject(PreferenceService)
     protected readonly preferences: PreferenceService;

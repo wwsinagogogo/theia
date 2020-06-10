@@ -54,26 +54,19 @@ export class FileService {
 
     private readonly BUFFER_SIZE = 64 * 1024;
 
-    private readonly toDispose = new DisposableCollection();
-
-    protected _register<T extends Disposable>(disposable: T): T {
-        this.toDispose.push(disposable);
-        return disposable;
-    }
-
     @inject(LabelProvider)
     protected readonly labelProvider: LabelProvider;
 
     // #region File System Provider
 
-    private _onDidChangeFileSystemProviderRegistrations = this._register(new Emitter<FileSystemProviderRegistrationEvent>());
-    readonly onDidChangeFileSystemProviderRegistrations = this._onDidChangeFileSystemProviderRegistrations.event;
+    private onDidChangeFileSystemProviderRegistrationsEmitter = new Emitter<FileSystemProviderRegistrationEvent>();
+    readonly onDidChangeFileSystemProviderRegistrations = this.onDidChangeFileSystemProviderRegistrationsEmitter.event;
 
-    private _onWillActivateFileSystemProvider = this._register(new Emitter<FileSystemProviderActivationEvent>());
-    readonly onWillActivateFileSystemProvider = this._onWillActivateFileSystemProvider.event;
+    private onWillActivateFileSystemProviderEmitter = new Emitter<FileSystemProviderActivationEvent>();
+    readonly onWillActivateFileSystemProvider = this.onWillActivateFileSystemProviderEmitter.event;
 
-    private _onDidChangeFileSystemProviderCapabilities = this._register(new Emitter<FileSystemProviderCapabilitiesChangeEvent>());
-    readonly onDidChangeFileSystemProviderCapabilities = this._onDidChangeFileSystemProviderCapabilities.event;
+    private onDidChangeFileSystemProviderCapabilitiesEmitter = new Emitter<FileSystemProviderCapabilitiesChangeEvent>();
+    readonly onDidChangeFileSystemProviderCapabilities = this.onDidChangeFileSystemProviderCapabilitiesEmitter.event;
 
     private readonly provider = new Map<string, FileSystemProvider>();
 
@@ -84,15 +77,15 @@ export class FileService {
 
         // Add provider with event
         this.provider.set(scheme, provider);
-        this._onDidChangeFileSystemProviderRegistrations.fire({ added: true, scheme, provider });
+        this.onDidChangeFileSystemProviderRegistrationsEmitter.fire({ added: true, scheme, provider });
 
         // Forward events from provider
         const providerDisposables = new DisposableCollection();
-        providerDisposables.push(provider.onDidChangeFile(changes => this._onDidFilesChange.fire(new FileChangesEvent(changes))));
-        providerDisposables.push(provider.onDidChangeCapabilities(() => this._onDidChangeFileSystemProviderCapabilities.fire({ provider, scheme })));
+        providerDisposables.push(provider.onDidChangeFile(changes => this.onDidFilesChangeEmitter.fire(new FileChangesEvent(changes))));
+        providerDisposables.push(provider.onDidChangeCapabilities(() => this.onDidChangeFileSystemProviderCapabilitiesEmitter.fire({ provider, scheme })));
 
         return Disposable.create(() => {
-            this._onDidChangeFileSystemProviderRegistrations.fire({ added: false, scheme, provider });
+            this.onDidChangeFileSystemProviderRegistrationsEmitter.fire({ added: false, scheme, provider });
             this.provider.delete(scheme);
 
             providerDisposables.dispose();
@@ -104,7 +97,7 @@ export class FileService {
         // Emit an event that we are about to activate a provider with the given scheme.
         // Listeners can participate in the activation by registering a provider for it.
         const joiners: Promise<void>[] = [];
-        this._onWillActivateFileSystemProvider.fire({
+        this.onWillActivateFileSystemProviderEmitter.fire({
             scheme,
             join(promise) {
                 if (promise) {
@@ -175,8 +168,8 @@ export class FileService {
 
     // #endregion
 
-    private _onDidRunOperation = this._register(new Emitter<FileOperationEvent>());
-    readonly onDidRunOperation = this._onDidRunOperation.event;
+    private onDidRunOperationEmitter = new Emitter<FileOperationEvent>();
+    readonly onDidRunOperation = this.onDidRunOperationEmitter.event;
 
     resolve(resource: URI, options: ResolveMetadataFileOptions): Promise<FileStatWithMetadata>;
     resolve(resource: URI, options?: ResolveFileOptions | undefined): Promise<FileStat>;
@@ -307,6 +300,39 @@ export class FileService {
         }
     }
 
+    /**
+     * Tests a user's permissions for the given resource.
+     */
+    async access(resource: URI, mode?: number): Promise<boolean> {
+        const provider = await this.withProvider(resource);
+
+        if (!provider.access) {
+            return false;
+        }
+        try {
+            await provider.access(resource, mode);
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    /**
+     * Returns the path of the given file URI.
+     *
+     * USE WITH CAUTION: You should always prefer URIs to paths if possible, as they are
+     * portable and platform independent. Paths should only be used in cases you directly
+     * interact with the OS, e.g. when running a command on the shell.
+     */
+    async fsPath(resource: URI): Promise<string> {
+        const provider = await this.withProvider(resource);
+
+        if (!provider.fsPath) {
+            return resource.path.toString();
+        }
+        return provider.fsPath(resource);
+    }
+
     // #region File Reading/Writing
 
     async createFile(resource: URI, bufferOrReadableOrStream: TextBuffer | TextBufferReadable | TextBufferReadableStream = TextBuffer.fromString(''), options?: CreateFileOptions): Promise<FileStatWithMetadata> {
@@ -320,7 +346,7 @@ export class FileService {
         const fileStat = await this.writeFile(resource, bufferOrReadableOrStream);
 
         // events
-        this._onDidRunOperation.fire(new FileOperationEvent(resource, FileOperation.CREATE, fileStat));
+        this.onDidRunOperationEmitter.fire(new FileOperationEvent(resource, FileOperation.CREATE, fileStat));
 
         return fileStat;
     }
@@ -535,7 +561,7 @@ export class FileService {
 
         // resolve and send events
         const fileStat = await this.resolve(target, { resolveMetadata: true });
-        this._onDidRunOperation.fire(new FileOperationEvent(source, mode === 'move' ? FileOperation.MOVE : FileOperation.COPY, fileStat));
+        this.onDidRunOperationEmitter.fire(new FileOperationEvent(source, mode === 'move' ? FileOperation.MOVE : FileOperation.COPY, fileStat));
 
         return fileStat;
     }
@@ -549,7 +575,7 @@ export class FileService {
 
         // resolve and send events
         const fileStat = await this.resolve(target, { resolveMetadata: true });
-        this._onDidRunOperation.fire(new FileOperationEvent(source, mode === 'copy' ? FileOperation.COPY : FileOperation.MOVE, fileStat));
+        this.onDidRunOperationEmitter.fire(new FileOperationEvent(source, mode === 'copy' ? FileOperation.COPY : FileOperation.MOVE, fileStat));
 
         return fileStat;
     }
@@ -703,7 +729,7 @@ export class FileService {
 
         // events
         const fileStat = await this.resolve(resource, { resolveMetadata: true });
-        this._onDidRunOperation.fire(new FileOperationEvent(resource, FileOperation.CREATE, fileStat));
+        this.onDidRunOperationEmitter.fire(new FileOperationEvent(resource, FileOperation.CREATE, fileStat));
 
         return fileStat;
     }
@@ -785,15 +811,15 @@ export class FileService {
         await provider.delete(resource, { recursive, useTrash });
 
         // Events
-        this._onDidRunOperation.fire(new FileOperationEvent(resource, FileOperation.DELETE));
+        this.onDidRunOperationEmitter.fire(new FileOperationEvent(resource, FileOperation.DELETE));
     }
 
     // #endregion
 
     // #region File Watching
 
-    private _onDidFilesChange = this._register(new Emitter<FileChangesEvent>());
-    readonly onDidFilesChange = this._onDidFilesChange.event;
+    private onDidFilesChangeEmitter = new Emitter<FileChangesEvent>();
+    readonly onDidFilesChange = this.onDidFilesChangeEmitter.event;
 
     private activeWatchers = new Map<string, { disposable: Disposable, count: number }>();
 
@@ -846,13 +872,6 @@ export class FileService {
             String(options.recursive),			// use recursive: true | false as part of the key
             options.excludes.join()				// use excludes as part of the key
         ].join();
-    }
-
-    dispose(): void {
-        this.toDispose.dispose();
-
-        this.activeWatchers.forEach(watcher => watcher.disposable.dispose());
-        this.activeWatchers.clear();
     }
 
     // #endregion

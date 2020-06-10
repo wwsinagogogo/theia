@@ -21,23 +21,22 @@
 import { interfaces } from 'inversify';
 import { RPCProtocol } from '../../common/rpc-protocol';
 import { MAIN_RPC_CONTEXT, FileSystemEvents } from '../../common/plugin-api-rpc';
-import { DisposableCollection as DisposableStore } from '@theia/core/lib/common/disposable';
+import { DisposableCollection } from '@theia/core/lib/common/disposable';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
-import { FileChangeType, FileOperation } from '@theia/filesystem/lib/common/files';
+import { WorkingCopyFileService } from '@theia/filesystem/lib/browser/working-copy-file-service';
+import { FileChangeType } from '@theia/filesystem/lib/common/files';
 
 export class MainFileSystemEventService {
 
-    private readonly _listener = new DisposableStore();
-    protected readonly fileService: FileService;
-    protected readonly textFileService: ITextFileService;
-    protected readonly workingCopyFileService: IWorkingCopyFileService;
+    private readonly toDispose = new DisposableCollection();
 
     constructor(
         rpc: RPCProtocol,
         container: interfaces.Container
     ) {
         const proxy = rpc.getProxy(MAIN_RPC_CONTEXT.ExtHostFileSystemEventService);
-        this.fileService = container.get(FileService);
+        const fileService = container.get(FileService);
+        const workingCopyFileService = container.get(WorkingCopyFileService);
 
         // file system events - (changes the editor and other make)
         const events: FileSystemEvents = {
@@ -45,7 +44,7 @@ export class MainFileSystemEventService {
             changed: [],
             deleted: []
         };
-        this._listener.push(this.fileService.onDidFilesChange(event => {
+        this.toDispose.push(fileService.onDidFilesChange(event => {
             for (const change of event.changes) {
                 switch (change.type) {
                     case FileChangeType.ADDED:
@@ -68,15 +67,14 @@ export class MainFileSystemEventService {
 
         // BEFORE file operation
         workingCopyFileService.addFileOperationParticipant({
-            participate: (target, source, operation, progress, timeout, token) => proxy.$onWillRunFileOperation(operation, target, source, timeout, token)
+            participate: (target, source, operation, timeout, token) => proxy.$onWillRunFileOperation(operation, target['codeUri'], source?.['codeUri'], timeout, token)
         });
 
         // AFTER file operation
-        this._listener.push(textFileService.onDidCreateTextFile(e => proxy.$onDidRunFileOperation(FileOperation.CREATE, e.resource, undefined)));
-        this._listener.push(workingCopyFileService.onDidRunWorkingCopyFileOperation(e => proxy.$onDidRunFileOperation(e.operation, e.target, e.source)));
+        this.toDispose.push(workingCopyFileService.onDidRunWorkingCopyFileOperation(e => proxy.$onDidRunFileOperation(e.operation, e.target['codeUri'], e.source?.['codeUri'])));
     }
 
     dispose(): void {
-        this._listener.dispose();
+        this.toDispose.dispose();
     }
 }

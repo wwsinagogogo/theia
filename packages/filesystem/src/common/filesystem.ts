@@ -31,11 +31,15 @@ export interface FileSystem extends JsonRpcServer<FileSystemClient> {
      * If the uri points to a folder it will contain one level of unresolved children.
      *
      * `undefined` if a file for the given URI does not exist.
+     *
+     * @deprecated since 1.4.0 - in order to suppot VS Code FS API (https://github.com/eclipse-theia/theia/pull/7908), use `FileService.resolve` instead
      */
     getFileStat(uri: string): Promise<FileStat | undefined>;
 
     /**
      * Finds out if a file identified by the resource exists.
+     *
+     * @deprecated since 1.4.0 - in order to suppot VS Code FS API (https://github.com/eclipse-theia/theia/pull/7908), use `FileService.exists` instead
      */
     exists(uri: string): Promise<boolean>;
 
@@ -128,6 +132,8 @@ export interface FileSystem extends JsonRpcServer<FileSystemClient> {
 
     /**
      * Returns a promise that resolves to a file stat representing the current user's home directory.
+     *
+     * @deprecated since 1.4.0 - in order to suppot VS Code FS API (https://github.com/eclipse-theia/theia/pull/7908), use `EnvVariablesServer.getHomeDirUri` instead
      */
     getCurrentUserHome(): Promise<FileStat | undefined>;
 
@@ -142,6 +148,8 @@ export interface FileSystem extends JsonRpcServer<FileSystemClient> {
      * Check `FileAccess.Constants` for possible values of mode.
      * It is possible to create a mask consisting of the bitwise `OR` of two or more values (e.g. FileAccess.Constants.W_OK | FileAccess.Constants.R_OK).
      * If `mode` is not defined, `FileAccess.Constants.F_OK` will be used instead.
+     *
+     * @deprecated since 1.4.0 - in order to suppot VS Code FS API (https://github.com/eclipse-theia/theia/pull/7908), use `FileService.access` instead
      */
     access(uri: string, mode?: number): Promise<boolean>
 
@@ -152,10 +160,15 @@ export interface FileSystem extends JsonRpcServer<FileSystemClient> {
      * USE WITH CAUTION: You should always prefer URIs to paths if possible, as they are
      * portable and platform independent. Paths should only be used in cases you directly
      * interact with the OS, e.g. when running a command on the shell.
+     *
+     * @deprecated since 1.4.0 - in order to suppot VS Code FS API (https://github.com/eclipse-theia/theia/pull/7908), use `FileService.fsPath` instead
      */
     getFsPath(uri: string): Promise<string | undefined>
 }
 
+/**
+ * @deprecated since 1.4.0 - in order to suppot VS Code FS API (https://github.com/eclipse-theia/theia/pull/7908), use `FileService.access` instead
+ */
 export namespace FileAccess {
 
     export namespace Constants {
@@ -267,6 +280,8 @@ export class DispatchingFileSystemClient implements FileSystemClient {
 
 /**
  * A file resource with meta information.
+ *
+ * @deprecated since 1.4.0 - in order to suppot VS Code FS API (https://github.com/eclipse-theia/theia/pull/7908), use `FileStat` from `@theia/filesystem/lib/common/files` instead
  */
 export interface FileStat {
 

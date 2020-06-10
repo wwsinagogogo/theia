@@ -71,6 +71,11 @@ These have precedence over the default associations of the languages installed.'
             'scope': 'language-overridable',
             'included': Object.keys(SUPPORTED_ENCODINGS).length > 1
         },
+        'files.participants.timeout': {
+            type: 'number',
+            default: 5000,
+            markdownDescription: 'Timeout in milliseconds after which file participants for create, rename, and delete are cancelled. Use `0` to disable participants.'
+        }
     }
 };
 
@@ -81,6 +86,7 @@ export interface FileSystemConfiguration {
     'files.associations': { [filepattern: string]: string };
     'files.encoding': string;
     'files.autoGuessEncoding': boolean;
+    'files.participants.timeout': number;
 }
 
 export const FileSystemPreferences = Symbol('FileSystemPreferences');

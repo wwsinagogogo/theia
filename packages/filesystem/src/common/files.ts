@@ -165,7 +165,7 @@ export class FileChangesEvent {
     }
 }
 
-interface BaseStat {
+export interface BaseStat {
 
 	/**
 	 * The unified resource identifier of this file or folder.
@@ -211,6 +211,14 @@ interface BaseStat {
 	 */
     etag?: string;
 }
+export namespace BaseStat {
+    export function is(arg: Object | undefined): arg is BaseStat {
+        return !!arg && typeof arg === 'object'
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            && ('resource' in arg && <any>arg['resource'] instanceof URI)
+            && ('name' in arg && typeof arg['name'] === 'string');
+    }
+}
 
 export interface BaseStatWithMetadata extends BaseStat {
     mtime: number;
@@ -243,6 +251,14 @@ export interface FileStat extends BaseStat {
 	 * The children of the file stat or undefined if none.
 	 */
     children?: FileStat[];
+}
+export namespace FileStat {
+    export function is(arg: Object | undefined): arg is BaseStat {
+        return BaseStat.is(arg) &&
+            ('isFile' in arg && typeof arg['isFile'] === 'boolean') &&
+            ('isDirectory' in arg && typeof arg['isDirectory'] === 'boolean') &&
+            ('isSymbolicLink' in arg && typeof arg['isSymbolicLink'] === 'boolean');
+    }
 }
 
 export interface FileStatWithMetadata extends FileStat, BaseStatWithMetadata {
@@ -484,6 +500,8 @@ export interface FileSystemProvider {
     watch(resource: URI, opts: WatchOptions): IDisposable;
 
     stat(resource: URI): Promise<Stat>;
+    access?(resource: URI, mode?: number): Promise<void>;
+    fsPath?(resource: URI): Promise<string>;
     mkdir(resource: URI): Promise<void>;
     readdir(resource: URI): Promise<[string, FileType][]>;
     delete(resource: URI, opts: FileDeleteOptions): Promise<void>;

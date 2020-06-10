@@ -349,7 +349,7 @@ export namespace WaitUntilEvent {
     export function fireAsync<T extends WaitUntilEvent>(
         emitter: Emitter<T>,
         event: Pick<T, Exclude<keyof T, 'waitUntil'>>,
-        token: CancellationToken,
+        token: CancellationToken = CancellationToken.None,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         promiseJoin?: (p: Promise<any>, listener: Function) => Promise<any>
     ): MaybePromise<void> {

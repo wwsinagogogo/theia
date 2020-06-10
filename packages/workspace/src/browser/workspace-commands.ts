@@ -20,7 +20,6 @@ import { SelectionService } from '@theia/core/lib/common/selection-service';
 import { Command, CommandContribution, CommandRegistry } from '@theia/core/lib/common/command';
 import { MenuContribution, MenuModelRegistry } from '@theia/core/lib/common/menu';
 import { CommonMenus } from '@theia/core/lib/browser/common-frontend-contribution';
-import { FileSystem, FileStat } from '@theia/filesystem/lib/common/filesystem';
 import { FileDialogService } from '@theia/filesystem/lib/browser';
 import { SingleTextInputDialog, ConfirmDialog } from '@theia/core/lib/browser/dialogs';
 import { OpenerService, OpenHandler, open, FrontendApplication, LabelProvider } from '@theia/core/lib/browser';
@@ -36,6 +35,9 @@ import { FileDownloadCommands } from '@theia/filesystem/lib/browser/download/fil
 import { FileSystemCommands } from '@theia/filesystem/lib/browser/filesystem-frontend-contribution';
 import { WorkspaceInputDialog } from './workspace-input-dialog';
 import { Emitter, Event } from '@theia/core/lib/common';
+import { FileService } from '@theia/filesystem/lib/browser/file-service';
+import { WorkingCopyFileService } from '@theia/filesystem/lib/browser/working-copy-file-service';
+import { FileStat } from '@theia/filesystem/lib/common/files';
 
 const validFilename: (arg: string) => boolean = require('valid-filename');
 
@@ -179,7 +181,8 @@ export interface DidCreateNewResourceEvent {
 export class WorkspaceCommandContribution implements CommandContribution {
 
     @inject(LabelProvider) protected readonly labelProvider: LabelProvider;
-    @inject(FileSystem) protected readonly fileSystem: FileSystem;
+    @inject(FileService) protected readonly fileService: FileService;
+    @inject(WorkingCopyFileService) protected readonly workingCopyFileService: WorkingCopyFileService;
     @inject(WorkspaceService) protected readonly workspaceService: WorkspaceService;
     @inject(SelectionService) protected readonly selectionService: SelectionService;
     @inject(OpenerService) protected readonly openerService: OpenerService;
@@ -224,7 +227,7 @@ export class WorkspaceCommandContribution implements CommandContribution {
         registry.registerCommand(WorkspaceCommands.NEW_FILE, this.newWorkspaceRootUriAwareCommandHandler({
             execute: uri => this.getDirectory(uri).then(parent => {
                 if (parent) {
-                    const parentUri = new URI(parent.uri);
+                    const parentUri = parent.resource;
                     const { fileName, fileExtension } = this.getDefaultFileConfig();
                     const vacantChildUri = FileSystemUtils.generateUniqueResourceURI(parentUri, parent, fileName, fileExtension);
 
@@ -238,7 +241,7 @@ export class WorkspaceCommandContribution implements CommandContribution {
                     dialog.open().then(async name => {
                         if (name) {
                             const fileUri = parentUri.resolve(name);
-                            await this.fileSystem.createFile(fileUri.toString());
+                            await this.workingCopyFileService.create(fileUri);
                             this.fireCreateNewFile({ parent: parentUri, uri: fileUri });
                             open(this.openerService, fileUri);
                         }
@@ -249,7 +252,7 @@ export class WorkspaceCommandContribution implements CommandContribution {
         registry.registerCommand(WorkspaceCommands.NEW_FOLDER, this.newWorkspaceRootUriAwareCommandHandler({
             execute: uri => this.getDirectory(uri).then(parent => {
                 if (parent) {
-                    const parentUri = new URI(parent.uri);
+                    const parentUri = parent.resource;
                     const vacantChildUri = FileSystemUtils.generateUniqueResourceURI(parentUri, parent, 'Untitled');
                     const dialog = new WorkspaceInputDialog({
                         title: 'New Folder',
@@ -260,7 +263,7 @@ export class WorkspaceCommandContribution implements CommandContribution {
                     dialog.open().then(async name => {
                         if (name) {
                             const folderUri = parentUri.resolve(name);
-                            await this.fileSystem.createFolder(folderUri.toString());
+                            await this.fileService.createFolder(folderUri);
                             this.fireCreateNewFile({ parent: parentUri, uri: folderUri });
                         }
                     });
@@ -275,10 +278,7 @@ export class WorkspaceCommandContribution implements CommandContribution {
                     const parent = await this.getParent(uri);
                     if (parent) {
                         const initialValue = uri.path.base;
-                        const stat = await this.fileSystem.getFileStat(uri.toString());
-                        if (stat === undefined) {
-                            throw new Error(`Unexpected error occurred when renaming. File does not exist. URI: ${uri.toString(true)}.`);
-                        }
+                        const stat = await this.fileService.resolve(uri);
                         const fileType = stat.isDirectory ? 'Directory' : 'File';
                         const titleStr = `Rename ${fileType}`;
                         const dialog = new SingleTextInputDialog({
@@ -299,7 +299,7 @@ export class WorkspaceCommandContribution implements CommandContribution {
                         if (fileName) {
                             const oldUri = uri;
                             const newUri = uri.parent.resolve(fileName);
-                            this.fileSystem.move(oldUri.toString(), newUri.toString());
+                            this.workingCopyFileService.move(oldUri, newUri);
                         }
                     }
                 });
@@ -380,8 +380,8 @@ export class WorkspaceCommandContribution implements CommandContribution {
         if (name.split(/[\\/]/).some(file => !file || !validFilename(file) || /^\s+$/.test(file))) {
             return `The name "${this.trimFileName(name)}" is not a valid file or folder name.`;
         }
-        const childUri = new URI(parent.uri).resolve(name).toString();
-        const exists = await this.fileSystem.exists(childUri);
+        const childUri = parent.resource.resolve(name);
+        const exists = await this.fileService.exists(childUri);
         if (exists) {
             return `A file or folder "${this.trimFileName(name)}" already exists at this location.`;
         }
@@ -396,7 +396,7 @@ export class WorkspaceCommandContribution implements CommandContribution {
     }
 
     protected async getDirectory(candidate: URI): Promise<FileStat | undefined> {
-        const stat = await this.fileSystem.getFileStat(candidate.toString());
+        const stat = await this.fileService.resolve(candidate, { resolveSingleChildDescendants: true, resolveMetadata: false });
         if (stat && stat.isDirectory) {
             return stat;
         }
@@ -404,12 +404,12 @@ export class WorkspaceCommandContribution implements CommandContribution {
     }
 
     protected getParent(candidate: URI): Promise<FileStat | undefined> {
-        return this.fileSystem.getFileStat(candidate.parent.toString());
+        return this.fileService.resolve(candidate.parent, { resolveSingleChildDescendants: true, resolveMetadata: false });
     }
 
     protected async addFolderToWorkspace(uri: URI | undefined): Promise<void> {
         if (uri) {
-            const stat = await this.fileSystem.getFileStat(uri.toString());
+            const stat = await this.fileService.resolve(uri);
             if (stat && stat.isDirectory) {
                 await this.workspaceService.addRoot(uri);
             }
@@ -454,7 +454,7 @@ export class WorkspaceCommandContribution implements CommandContribution {
                 listItem.title = this.labelProvider.getLongName(uri);
                 const listContent = document.createElement('span');
                 listContent.classList.add('theia-dialog-node-segment');
-                listContent.appendChild(document.createTextNode(uri.displayName));
+                listContent.appendChild(document.createTextNode(this.labelProvider.getName(uri)));
                 listItem.appendChild(listContent);
                 list.appendChild(listItem);
             });

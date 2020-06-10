@@ -16,14 +16,15 @@
 
 import { SelectionService } from '@theia/core/lib/common/selection-service';
 import { SelectionCommandHandler } from '@theia/core/lib/common/selection-command-handler';
-import { FileStat } from '../common/filesystem';
+import { FileStat as DeprecatedFileStat } from '../common/filesystem';
+import { FileStat } from '../common/files';
 
 export interface FileSelection {
-    fileStat: FileStat
+    fileStat: DeprecatedFileStat | FileStat
 }
 export namespace FileSelection {
     export function is(arg: Object | undefined): arg is FileSelection {
-        return typeof arg === 'object' && ('fileStat' in arg) && FileStat.is(arg['fileStat']);
+        return typeof arg === 'object' && ('fileStat' in arg) && (DeprecatedFileStat.is(arg['fileStat']) || FileStat.is(arg['fileStat']));
     }
     export class CommandHandler extends SelectionCommandHandler<FileSelection> {
 
